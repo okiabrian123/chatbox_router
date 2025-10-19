@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  chatbox-router:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: docker.io/okiabrian/chatbox-router:latest
+    container_name: chatbox-router
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "443:443"
+    volumes:
+      - ./.config:/app/.config:ro
+      - ./certs:/app/certs:ro
+      - ./logs:/var/log/program
+    environment:
+      - RUST_LOG=info
+      - ENVIRONMENT=production
+    networks:
+      - chatbox-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: chatbox-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - chatbox-router
+    networks:
+      - chatbox-network
+
+networks:
+  chatbox-network:
+    driver: bridge
