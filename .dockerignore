@@ -1,0 +1,12 @@
+target
+debug
+.DS_Store
+.dockerignore
+.git
+.gitignore
+README.md
+.github
+*.sh
+Dockerfile*
+docker-compose*.yml
+tcm/
