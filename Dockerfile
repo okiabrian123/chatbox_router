@@ -59,7 +59,7 @@ RUN useradd -r -s /bin/false appuser
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/chatbox-proxy_handler ./chatbox-proxy_handler
+COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/chatbox-router ./chatbox-router
 
 # Copy config
 COPY --from=builder /app/config ./.config
@@ -79,4 +79,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the application
-CMD ["./chatbox-proxy_handler"]
+CMD ["./chatbox-router"]
