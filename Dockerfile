@@ -40,7 +40,6 @@ RUN cargo build --release --target=x86_64-unknown-linux-gnu && rm -rf src
 # Copy source code
 COPY src ./src
 COPY .config ./config
-COPY static ./static
 
 # Build the application
 RUN cargo build --release --target=x86_64-unknown-linux-gnu
@@ -62,8 +61,7 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /app/target/x86_64-unknown-linux-gnu/release/chatbox-proxy_handler ./chatbox-proxy_handler
 
-# Copy static files and config
-COPY --from=builder /app/static ./static
+# Copy config
 COPY --from=builder /app/config ./.config
 
 # Create necessary directories
@@ -81,4 +79,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the application
-CMD ["./chatbox-API_AI"]
+CMD ["./chatbox-proxy_handler"]

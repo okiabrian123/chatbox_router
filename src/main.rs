@@ -1,5 +1,5 @@
-use actix_web::{web, App, HttpServer};
-use actix_session::{SessionMiddleware, storage::CookieSessionStore};
+use actix_web::{web, App, HttpServer, HttpResponse};
+use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_cors::Cors;
 
@@ -16,11 +16,13 @@ mod key_management;
 mod tools;
 mod ai_handlers;
 mod image_handlers;
+mod session_config;
 use keyring::Entry;
 use std::error::Error;
 use middleware::check_auth_mw;
 use routes::{configure_api_routes, configure_routes, configure_static_routes};
 use config::{load_certs, load_private_key};
+use session_config::{create_redis_session_store, create_session_middleware};
 
 fn initialize_password_manager(service_name: &str, username: &str, key: &str) -> web::Data<PasswordManager> {
     info!("test0");
@@ -142,6 +144,15 @@ async fn main() -> io::Result<()> {
     let ip = args.ip.clone();
     let port = args.port.clone();
     let args_data = web::Data::new(args);
+    // Create Redis session store for shared session management
+    let session_store = match create_redis_session_store().await {
+        Ok(store) => store,
+        Err(e) => {
+            eprintln!("Failed to create Redis session store: {}", e);
+            return Err(io::Error::new(io::ErrorKind::Other, "Failed to create session store"));
+        }
+    };
+
     HttpServer::new(move || {
         App::new()
         .app_data(password_manager.clone())
@@ -151,27 +162,20 @@ async fn main() -> io::Result<()> {
                 .allowed_origin("https://testcasemanager.my.id") // Allow specific origin
                 .allowed_origin("https://chatpintar.my.id") // Allow specific origin
                 .allowed_origin("https://local3.testcasemanager.my.id") // Allow specific origin
-                .allowed_methods(vec!["GET", "POST"])
-                .allowed_headers(vec!["Content-Type"])
+                .allowed_origin("http://localhost:8080") // Allow local development
+                .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                .allowed_headers(vec!["Content-Type", "Authorization", "Cookie"])
                 .max_age(3600),
         )
-            .wrap(SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
-                .cookie_secure(true)
-                .cookie_http_only(true)
-                .cookie_name("login-session".to_string())
-                .cookie_path("/".to_string())
-                .session_lifecycle(
-                    actix_session::config::PersistentSession::default()
-                        .session_ttl(actix_web::cookie::time::Duration::days(30))
-                )
-                .cookie_same_site(actix_web::cookie::SameSite::Lax)
-                .build())
+            .wrap(create_session_middleware(session_store.clone(), secret_key.clone()))
                 .service(web::scope("/static").configure(configure_static_routes))
                 .service(
                     web::scope("/api")
                         .wrap(actix_web_lab::middleware::from_fn(check_auth_mw))
                         .configure(configure_api_routes)
                 )
+                .service(web::resource("/health")
+                    .route(web::get().to(health_check)))
                 .configure(configure_routes)
     })
     .bind_rustls_0_23(format!("{}:{}", ip, port) , server_config)?
@@ -190,5 +194,14 @@ fn read_credentials(file_path: &str) -> io::Result<HashMap<String, String>> {
         }
     }
 
+
+// Health check endpoint for Docker container
+async fn health_check() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "healthy",
+        "service": "proxy_handler",
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    }))
+}
     Ok(credentials)
 }
