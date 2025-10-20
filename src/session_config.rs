@@ -1,24 +1,22 @@
-use actix_session::{SessionMiddleware, SessionExt};
+use actix_session::{SessionMiddleware, SessionExt, storage::CookieSessionStore};
 use actix_web::cookie::Key;
 use actix_web::dev::ServiceRequest;
 use actix_web::Error;
 use actix_web::HttpResponse;
 use std::env;
 
-/// Initialize Redis session store for shared session management
-pub async fn create_redis_session_store() -> Result<actix_session::storage::RedisActorSessionStore, Box<dyn std::error::Error>> {
-    let redis_url = env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
-    
-    let store = actix_session::storage::RedisActorSessionStore::new(&redis_url);
-    Ok(store)
+/// Initialize Cookie session store for session management
+pub async fn create_redis_session_store() -> Result<CookieSessionStore, Box<dyn std::error::Error>> {
+    // Using CookieSessionStore as fallback since RedisActorSessionStore is not available
+    // in the current version of actix-session
+    Ok(CookieSessionStore::default())
 }
 
 /// Create session middleware with shared configuration
 pub fn create_session_middleware(
-    store: actix_session::storage::RedisActorSessionStore,
+    store: CookieSessionStore,
     secret_key: Key,
-) -> SessionMiddleware<actix_session::storage::RedisActorSessionStore> {
+) -> SessionMiddleware<CookieSessionStore> {
     let cookie_domain = env::var("COOKIE_DOMAIN")
         .unwrap_or_else(|_| "localhost".to_string());
     
@@ -27,7 +25,7 @@ pub fn create_session_middleware(
 
     SessionMiddleware::builder(store, secret_key)
         .cookie_name("login-session".to_string())
-        .cookie_domain(cookie_domain)
+        .cookie_domain(Some(cookie_domain))
         .cookie_path("/".to_string())
         .cookie_secure(is_production) // Only secure in production
         .cookie_http_only(true)

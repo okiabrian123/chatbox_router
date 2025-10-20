@@ -1,12 +1,12 @@
 use actix_web::{web, App, HttpServer, HttpResponse};
-use actix_session::SessionMiddleware;
+use actix_session::storage::CookieSessionStore;
 use actix_web::cookie::Key;
 use actix_cors::Cors;
 
 use key_management::PasswordManager;
 use log::info;
-use rustls::{crypto::CryptoProvider, ServerConfig};
-use std::{collections::HashMap, env, fs, io::{self, BufRead}, path::{Path, PathBuf}};
+use rustls::ServerConfig;
+use std::{collections::HashMap, env, fs, io::{self, BufRead}, path::Path};
 
 mod middleware;
 mod routes;
@@ -18,15 +18,14 @@ mod ai_handlers;
 mod image_handlers;
 mod session_config;
 use keyring::Entry;
-use std::error::Error;
 use middleware::check_auth_mw;
 use routes::{configure_api_routes, configure_routes, configure_static_routes};
 use config::{load_certs, load_private_key};
-use session_config::{create_redis_session_store, create_session_middleware};
+use session_config::create_session_middleware;
 
 fn initialize_password_manager(service_name: &str, username: &str, key: &str) -> web::Data<PasswordManager> {
     info!("test0");
-    let entry = match Entry::new("aaaa", "bbbb") {
+    let _entry = match Entry::new("aaaa", "bbbb") {
         Ok(entry) => entry,
         Err(e) => {
             eprintln!("Gagal membuat Entry: {}", e);
@@ -96,7 +95,7 @@ async fn main() -> io::Result<()> {
     rustls::crypto::ring::default_provider().install_default().expect("Gagal memasang penyedia crypto rustls");
     env_logger::init();
     let exe_path = env::current_exe().expect("Failed to get executable path");
-    let exe_dir = exe_path.parent().expect("Failed to get parent directory");
+    let _exe_dir = exe_path.parent().expect("Failed to get parent directory");
     let file_path = ".config/px.toml";
 
     // Periksa apakah file ada
@@ -144,16 +143,10 @@ async fn main() -> io::Result<()> {
     let ip = args.ip.clone();
     let port = args.port.clone();
     let args_data = web::Data::new(args);
-    // Create Redis session store for shared session management
-    let session_store = match create_redis_session_store().await {
-        Ok(store) => store,
-        Err(e) => {
-            eprintln!("Failed to create Redis session store: {}", e);
-            return Err(io::Error::new(io::ErrorKind::Other, "Failed to create session store"));
-        }
-    };
-
     HttpServer::new(move || {
+        // Create session middleware for each worker
+        let store = create_session_middleware(CookieSessionStore::default(), secret_key.clone());
+        
         App::new()
         .app_data(password_manager.clone())
         .app_data(args_data.clone())
@@ -167,7 +160,7 @@ async fn main() -> io::Result<()> {
                 .allowed_headers(vec!["Content-Type", "Authorization", "Cookie"])
                 .max_age(3600),
         )
-            .wrap(create_session_middleware(session_store.clone(), secret_key.clone()))
+            .wrap(store)
                 .service(web::scope("/static").configure(configure_static_routes))
                 .service(
                     web::scope("/api")
@@ -182,6 +175,15 @@ async fn main() -> io::Result<()> {
     .run()
     .await
 }
+// Health check endpoint for Docker container
+async fn health_check() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({
+        "status": "healthy",
+        "service": "proxy_handler",
+        "timestamp": chrono::Utc::now().to_rfc3339()
+    }))
+}
+
 fn read_credentials(file_path: &str) -> io::Result<HashMap<String, String>> {
     let file = fs::File::open(file_path)?;
     let reader = io::BufReader::new(file);
@@ -194,14 +196,5 @@ fn read_credentials(file_path: &str) -> io::Result<HashMap<String, String>> {
         }
     }
 
-
-// Health check endpoint for Docker container
-async fn health_check() -> HttpResponse {
-    HttpResponse::Ok().json(serde_json::json!({
-        "status": "healthy",
-        "service": "proxy_handler",
-        "timestamp": chrono::Utc::now().to_rfc3339()
-    }))
-}
     Ok(credentials)
 }

@@ -1,4 +1,4 @@
-use actix_web::web::{self, scope};
+use actix_web::web;
 
 use crate::{ai_handlers::proxy_ai_handler, image_handlers::proxy_image_handler, user_handlers::{proxy_payment_handler, proxy_payment_no_login_handler, proxy_user_get_handler, proxy_user_post_handler, proxy_user_post_login_handler}};
 
