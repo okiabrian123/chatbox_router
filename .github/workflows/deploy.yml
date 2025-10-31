@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: okiabrian123/chatbox-router
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
