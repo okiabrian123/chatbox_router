@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: docker.io
-  IMAGE_NAME: okiabrian/chatbox-router
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
@@ -74,8 +74,8 @@ jobs:
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Extract metadata
       id: meta
@@ -85,7 +85,9 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
-          type=sha,prefix={{branch}}-
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
           type=raw,value=latest,enable={{is_default_branch}}
     
     - name: Build and push Docker image
